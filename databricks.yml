@@ -1,0 +1,132 @@
+bundle:
+  name: spotify_azure_project_fixed
+  databricks_cli_version: ">=0.261.0"
+
+run_as:
+  user_name: ${workspace.current_user.userName}
+
+sync:
+  include:
+    - notebooks/**
+    - utils/**
+    - conf/**
+    - sql/**
+    - infra/**
+    - tests/**
+
+variables:
+  workspace_host:
+    description: Databricks workspace host URL
+    default: https://adb-7405615781335606.6.azuredatabricks.net
+  catalog_name:
+    description: Unity Catalog name
+    default: spotify_cata_dev
+  node_type_id:
+    description: Azure Databricks cluster node type
+    default: Standard_DS3_v2
+  storage_account:
+    description: Azure Data Lake Storage Gen2 account
+    default: stsptfydata5391
+  notification_email:
+    description: Email for Databricks job notifications
+    default: "dataops@example.com"
+
+resources:
+  jobs:
+    silver_streaming_job:
+      name: spotify-silver-streaming-${bundle.target}
+      email_notifications:
+        on_failure:
+          - ${var.notification_email}
+      tasks:
+        - task_key: silver_ingestion
+          notebook_task:
+            notebook_path: ./notebooks/silver/silver_ingestion.py
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: ${var.node_type_id}
+            num_workers: 0
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+        - task_key: data_quality_validation
+          depends_on:
+            - task_key: silver_ingestion
+          notebook_task:
+            notebook_path: ./notebooks/quality/data_quality_validation.py
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: ${var.node_type_id}
+            num_workers: 0
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+
+    gold_modeling_job:
+      name: spotify-gold-modeling-${bundle.target}
+      email_notifications:
+        on_failure:
+          - ${var.notification_email}
+      tasks:
+        - task_key: gold_scd2_merge
+          notebook_task:
+            notebook_path: ./notebooks/gold/gold_scd2_merge.py
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: ${var.node_type_id}
+            num_workers: 0
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+        - task_key: gold_pipeline_refresh
+          depends_on:
+            - task_key: gold_scd2_merge
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.gold_dlt_pipeline.id}
+            full_refresh: false
+
+  pipelines:
+    gold_dlt_pipeline:
+      name: spotify-gold-dlt-${bundle.target}
+      catalog: ${var.catalog_name}
+      target: gold
+      development: true
+      continuous: false
+      channel: CURRENT
+      edition: ADVANCED
+      photon: false
+      serverless: true
+      libraries:
+        - notebook:
+            path: ./notebooks/gold/gold_dlt_pipeline.py
+      configuration:
+        catalog_name: ${var.catalog_name}
+        silver_schema: silver
+        gold_schema: gold
+        storage_account: ${var.storage_account}
+
+targets:
+  dev:
+    default: true
+    workspace:
+      host: https://adb-7405615781335606.6.azuredatabricks.net
+    variables:
+      catalog_name: spotify_cata_dev
+
+  prod:
+    workspace:
+      host: https://adb-7405615781335606.6.azuredatabricks.net
+    variables:
+      catalog_name: spotify_cata_prod

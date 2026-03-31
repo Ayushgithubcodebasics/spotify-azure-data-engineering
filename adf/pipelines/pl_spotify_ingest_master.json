@@ -1,0 +1,90 @@
+{
+  "name": "PL_Spotify_Ingest_Master",
+  "properties": {
+    "parameters": {},
+    "activities": [
+      {
+        "name": "Lookup_Table_Config_With_Watermark",
+        "type": "Lookup",
+        "policy": {
+          "retry": 3,
+          "retryIntervalInSeconds": 120,
+          "timeout": "0.12:00:00"
+        },
+        "typeProperties": {
+          "source": {
+            "type": "AzureSqlSource",
+            "sqlReaderQuery": "\nSELECT c.schema_name,\n       c.table_name,\n       c.cdc_column,\n       COALESCE(CONVERT(varchar(19), w.last_load_timestamp, 120), '1900-01-01 00:00:00') AS watermark_date\nFROM metadata.table_configs c\nLEFT JOIN metadata.pipeline_watermarks w\n  ON c.table_name = w.table_name\nWHERE c.is_active = 1\nORDER BY c.table_name;\n",
+            "queryTimeout": "02:00:00"
+          },
+          "dataset": {
+            "referenceName": "DS_Sql_IncrementalQuery",
+            "type": "DatasetReference",
+            "parameters": {
+              "schemaName": "metadata",
+              "tableName": "table_configs",
+              "cdcColumn": "table_name",
+              "watermarkDate": "1900-01-01 00:00:00"
+            }
+          },
+          "firstRowOnly": false
+        }
+      },
+      {
+        "name": "ForEach_Table",
+        "type": "ForEach",
+        "dependsOn": [
+          {
+            "activity": "Lookup_Table_Config_With_Watermark",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "items": {
+            "value": "@activity('Lookup_Table_Config_With_Watermark').output.value",
+            "type": "Expression"
+          },
+          "isSequential": true,
+          "activities": [
+            {
+              "name": "Execute_Copy_Table_Pipeline",
+              "type": "ExecutePipeline",
+              "policy": {
+                "retry": 3,
+                "retryIntervalInSeconds": 120,
+                "timeout": "0.12:00:00"
+              },
+              "typeProperties": {
+                "pipeline": {
+                  "referenceName": "PL_Spotify_Copy_Table",
+                  "type": "PipelineReference"
+                },
+                "waitOnCompletion": true,
+                "parameters": {
+                  "schemaName": {
+                    "value": "@item().schema_name",
+                    "type": "Expression"
+                  },
+                  "tableName": {
+                    "value": "@item().table_name",
+                    "type": "Expression"
+                  },
+                  "cdcColumn": {
+                    "value": "@item().cdc_column",
+                    "type": "Expression"
+                  },
+                  "watermarkDate": {
+                    "value": "@item().watermark_date",
+                    "type": "Expression"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

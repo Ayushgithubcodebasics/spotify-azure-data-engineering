@@ -1,0 +1,31 @@
+{
+  "name": "DS_Sql_IncrementalQuery",
+  "properties": {
+    "linkedServiceName": {
+      "referenceName": "LS_AzureSql_SpotifySource",
+      "type": "LinkedServiceReference"
+    },
+    "parameters": {
+      "schemaName": {
+        "type": "String"
+      },
+      "tableName": {
+        "type": "String"
+      },
+      "cdcColumn": {
+        "type": "String"
+      },
+      "watermarkDate": {
+        "type": "String"
+      }
+    },
+    "type": "AzureSqlTable",
+    "schema": [],
+    "typeProperties": {
+      "tableName": {
+        "value": "@{dataset().schemaName}.@{dataset().tableName}",
+        "type": "Expression"
+      }
+    }
+  }
+}

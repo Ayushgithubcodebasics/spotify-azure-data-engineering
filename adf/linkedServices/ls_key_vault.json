@@ -1,0 +1,11 @@
+{
+  "name": "LS_AzureKeyVault",
+  "properties": {
+    "annotations": [],
+    "type": "AzureKeyVault",
+    "typeProperties": {
+      "baseUrl": "https://kv-sptfy-dataops-5391.vault.azure.net/"
+    }
+  }
+}
+

@@ -1,0 +1,290 @@
+{
+  "name": "PL_Spotify_Copy_Table",
+  "properties": {
+    "parameters": {
+      "schemaName": {
+        "type": "String"
+      },
+      "tableName": {
+        "type": "String"
+      },
+      "cdcColumn": {
+        "type": "String"
+      },
+      "watermarkDate": {
+        "type": "String"
+      }
+    },
+    "activities": [
+      {
+        "name": "Get_LogicApp_Webhook_Secret",
+        "type": "WebActivity",
+        "policy": {
+          "retry": 3,
+          "retryIntervalInSeconds": 120,
+          "timeout": "0.12:00:00",
+          "secureInput": true,
+          "secureOutput": true
+        },
+        "typeProperties": {
+          "method": "GET",
+          "url": "https://kv-sptfy-dataops-5391.vault.azure.net/secrets/spotify-logicapp-webhook-url?api-version=7.5",
+          "authentication": {
+            "type": "MSI",
+            "resource": "https://vault.azure.net"
+          },
+          "headers": {
+            "Accept": "application/json"
+          }
+        }
+      },
+      {
+        "name": "Copy_Incremental_To_Bronze",
+        "type": "Copy",
+        "policy": {
+          "retry": 3,
+          "retryIntervalInSeconds": 120,
+          "timeout": "0.12:00:00"
+        },
+        "inputs": [
+          {
+            "referenceName": "DS_Sql_IncrementalQuery",
+            "type": "DatasetReference",
+            "parameters": {
+              "schemaName": {
+                "value": "@pipeline().parameters.schemaName",
+                "type": "Expression"
+              },
+              "tableName": {
+                "value": "@pipeline().parameters.tableName",
+                "type": "Expression"
+              },
+              "cdcColumn": {
+                "value": "@pipeline().parameters.cdcColumn",
+                "type": "Expression"
+              },
+              "watermarkDate": {
+                "value": "@pipeline().parameters.watermarkDate",
+                "type": "Expression"
+              }
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "DS_Bronze_ParquetSink",
+            "type": "DatasetReference",
+            "parameters": {
+              "folderPath": {
+                "value": "@pipeline().parameters.tableName",
+                "type": "Expression"
+              },
+              "fileName": {
+                "value": "@concat(toLower(pipeline().parameters.tableName), '_', formatDateTime(utcNow(), 'yyyyMMddHHmmss'), '.parquet')",
+                "type": "Expression"
+              }
+            }
+          }
+        ],
+        "typeProperties": {
+          "source": {
+            "type": "AzureSqlSource",
+            "sqlReaderQuery": {
+              "value": "@concat('SELECT * FROM [', pipeline().parameters.schemaName, '].[', pipeline().parameters.tableName, '] WHERE [', pipeline().parameters.cdcColumn, '] > ''', pipeline().parameters.watermarkDate, '''')",
+              "type": "Expression"
+            },
+            "queryTimeout": "02:00:00"
+          },
+          "sink": {
+            "type": "ParquetSink",
+            "storeSettings": {
+              "type": "AzureBlobFSWriteSettings"
+            },
+            "formatSettings": {
+              "type": "ParquetWriteSettings"
+            }
+          },
+          "enableStaging": false
+        },
+        "dependsOn": [
+          {
+            "activity": "Get_LogicApp_Webhook_Secret",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Lookup_Max_Watermark_And_RowCount",
+        "type": "Lookup",
+        "dependsOn": [
+          {
+            "activity": "Copy_Incremental_To_Bronze",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "policy": {
+          "retry": 3,
+          "retryIntervalInSeconds": 120,
+          "timeout": "0.12:00:00"
+        },
+        "typeProperties": {
+          "source": {
+            "type": "AzureSqlSource",
+            "sqlReaderQuery": {
+              "value": "@concat('SELECT MAX([', pipeline().parameters.cdcColumn, ']) AS max_watermark, COUNT(1) AS row_count FROM [', pipeline().parameters.schemaName, '].[', pipeline().parameters.tableName, '] WHERE [', pipeline().parameters.cdcColumn, '] > ''', pipeline().parameters.watermarkDate, '''')",
+              "type": "Expression"
+            }
+          },
+          "dataset": {
+            "referenceName": "DS_Sql_IncrementalQuery",
+            "type": "DatasetReference",
+            "parameters": {
+              "schemaName": {
+                "value": "@pipeline().parameters.schemaName",
+                "type": "Expression"
+              },
+              "tableName": {
+                "value": "@pipeline().parameters.tableName",
+                "type": "Expression"
+              },
+              "cdcColumn": {
+                "value": "@pipeline().parameters.cdcColumn",
+                "type": "Expression"
+              },
+              "watermarkDate": {
+                "value": "@pipeline().parameters.watermarkDate",
+                "type": "Expression"
+              }
+            }
+          },
+          "firstRowOnly": true
+        }
+      },
+      {
+        "name": "Update_Watermark_Success",
+        "type": "SqlServerStoredProcedure",
+        "dependsOn": [
+          {
+            "activity": "Lookup_Max_Watermark_And_RowCount",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "policy": {
+          "retry": 3,
+          "retryIntervalInSeconds": 120,
+          "timeout": "0.12:00:00"
+        },
+        "linkedServiceName": {
+          "referenceName": "LS_AzureSql_SpotifySource",
+          "type": "LinkedServiceReference"
+        },
+        "typeProperties": {
+          "storedProcedureName": "[metadata].[usp_update_pipeline_watermark]",
+          "storedProcedureParameters": {
+            "table_name": {
+              "value": {
+                "value": "@pipeline().parameters.tableName",
+                "type": "Expression"
+              },
+              "type": "String"
+            },
+            "last_load_timestamp": {
+              "value": {
+                "value": "@activity('Lookup_Max_Watermark_And_RowCount').output.firstRow.max_watermark",
+                "type": "Expression"
+              },
+              "type": "DateTime"
+            },
+            "last_row_count": {
+              "value": {
+                "value": "@activity('Lookup_Max_Watermark_And_RowCount').output.firstRow.row_count",
+                "type": "Expression"
+              },
+              "type": "Int64"
+            },
+            "load_status": {
+              "value": "SUCCESS",
+              "type": "String"
+            }
+          }
+        }
+      },
+      {
+        "name": "Update_Watermark_Failure",
+        "type": "SqlServerStoredProcedure",
+        "dependsOn": [
+          {
+            "activity": "Copy_Incremental_To_Bronze",
+            "dependencyConditions": [
+              "Failed"
+            ]
+          }
+        ],
+        "policy": {
+          "retry": 3,
+          "retryIntervalInSeconds": 120,
+          "timeout": "0.12:00:00"
+        },
+        "linkedServiceName": {
+          "referenceName": "LS_AzureSql_SpotifySource",
+          "type": "LinkedServiceReference"
+        },
+        "typeProperties": {
+          "storedProcedureName": "[metadata].[usp_update_pipeline_watermark]",
+          "storedProcedureParameters": {
+            "table_name": {
+              "value": {
+                "value": "@pipeline().parameters.tableName",
+                "type": "Expression"
+              },
+              "type": "String"
+            },
+            "load_status": {
+              "value": "FAILED",
+              "type": "String"
+            }
+          }
+        }
+      },
+      {
+        "name": "Notify_On_Failure",
+        "type": "WebActivity",
+        "dependsOn": [
+          {
+            "activity": "Copy_Incremental_To_Bronze",
+            "dependencyConditions": [
+              "Failed"
+            ]
+          }
+        ],
+        "policy": {
+          "retry": 3,
+          "retryIntervalInSeconds": 120,
+          "timeout": "0.12:00:00",
+          "secureInput": true,
+          "secureOutput": true
+        },
+        "typeProperties": {
+          "method": "POST",
+          "url": {
+            "value": "@activity('Get_LogicApp_Webhook_Secret').output.value",
+            "type": "Expression"
+          },
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "value": "@concat('{\"pipeline\":\"PL_Spotify_Copy_Table\",\"table\":\"', pipeline().parameters.tableName, '\",\"status\":\"FAILED\",\"watermark\":\"', pipeline().parameters.watermarkDate, '\"}')",
+            "type": "Expression"
+          }
+        }
+      }
+    ]
+  }
+}

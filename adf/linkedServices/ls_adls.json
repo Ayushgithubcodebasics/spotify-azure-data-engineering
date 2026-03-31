@@ -1,0 +1,18 @@
+{
+  "name": "LS_ADLS_Spotify",
+  "properties": {
+    "annotations": [
+      "auth:system-assigned-managed-identity",
+      "doc:https://learn.microsoft.com/en-us/azure/data-factory/connector-azure-data-lake-storage"
+    ],
+    "type": "AzureBlobFS",
+    "typeProperties": {
+      "url": "https://stsptfydata5391.dfs.core.windows.net"
+    },
+    "description": "Azure Data Lake Storage Gen2 linked service using the Azure Data Factory system-assigned managed identity. Grant the factory managed identity Storage Blob Data Contributor on the bronze file system and Execute on upstream folders.",
+    "connectVia": {
+      "referenceName": "AutoResolveIntegrationRuntime",
+      "type": "IntegrationRuntimeReference"
+    }
+  }
+}

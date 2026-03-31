@@ -1,0 +1,74 @@
+{
+  "tables": [
+    {
+      "table_name": "DimUser",
+      "source_schema": "dbo",
+      "cdc_column": "updated_at",
+      "primary_keys": [
+        "user_id"
+      ],
+      "bronze_path": "DimUser",
+      "silver_table": "DimUser",
+      "target_path": "DimUser",
+      "partition_by": [],
+      "deduplicate_order_column": "updated_at"
+    },
+    {
+      "table_name": "DimArtist",
+      "source_schema": "dbo",
+      "cdc_column": "updated_at",
+      "primary_keys": [
+        "artist_id"
+      ],
+      "bronze_path": "DimArtist",
+      "silver_table": "DimArtist",
+      "target_path": "DimArtist",
+      "partition_by": [],
+      "deduplicate_order_column": "updated_at"
+    },
+    {
+      "table_name": "DimTrack",
+      "source_schema": "dbo",
+      "cdc_column": "updated_at",
+      "primary_keys": [
+        "track_id"
+      ],
+      "bronze_path": "DimTrack",
+      "silver_table": "DimTrack",
+      "target_path": "DimTrack",
+      "partition_by": [],
+      "deduplicate_order_column": "updated_at"
+    },
+    {
+      "table_name": "DimDate",
+      "source_schema": "dbo",
+      "cdc_column": "date",
+      "primary_keys": [
+        "date_key"
+      ],
+      "bronze_path": "DimDate",
+      "silver_table": "DimDate",
+      "target_path": "DimDate",
+      "partition_by": [
+        "year",
+        "month"
+      ],
+      "deduplicate_order_column": "date"
+    },
+    {
+      "table_name": "FactStream",
+      "source_schema": "dbo",
+      "cdc_column": "stream_timestamp",
+      "primary_keys": [
+        "stream_id"
+      ],
+      "bronze_path": "FactStream",
+      "silver_table": "FactStream",
+      "target_path": "FactStream",
+      "partition_by": [
+        "event_date"
+      ],
+      "deduplicate_order_column": "stream_timestamp"
+    }
+  ]
+}

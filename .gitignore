@@ -1,0 +1,32 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local env / secrets
+.env
+.venv/
+venv/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Databricks bundle local state — NEVER commit (126 MB of binaries + workspace state)
+.databricks/
+
+# Terraform artefacts
+*.tfstate
+*.tfstate.backup
+*.tf.json
+*.lock.hcl
+plan
+
+# Binaries
+*.exe
+*.dll
+
+# Bundle sync snapshots
+sync-snapshots/

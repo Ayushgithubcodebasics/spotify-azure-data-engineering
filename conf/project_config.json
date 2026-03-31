@@ -1,0 +1,22 @@
+{
+    "catalog_name":  "spotify_cata_dev",
+    "bronze_container":  "bronze",
+    "silver_container":  "silver",
+    "gold_container":  "gold",
+    "metadata_schema":  "metadata",
+    "silver_schema":  "silver",
+    "gold_schema":  "gold",
+    "storage_account":  "stsptfydata5391",
+    "logic_app_webhook_url":  "\u003clogic-app-webhook-url\u003e",
+    "sql_server":  "sql-sptfy-ne-5391.database.windows.net",
+    "sql_database":  "spotify_source",
+    "sql_username_secret_scope":  "kv-secrets",
+    "sql_username_secret_key":  "sql-admin-username",
+    "sql_password_secret_scope":  "kv-secrets",
+    "sql_password_secret_key":  "sql-admin-password",
+    "source_schema":  "dbo",
+    "job_notification_emails":  [
+                                    "dataops@example.com"
+                                ]
+}
+

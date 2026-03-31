@@ -1,0 +1,130 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "westeurope"
+    },
+    "dataFactoryResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the Azure Data Factory instance."
+      }
+    },
+    "logAnalyticsWorkspaceResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the Log Analytics workspace."
+      }
+    },
+    "actionGroupName": {
+      "type": "string",
+      "defaultValue": "ag-spotify-dataops"
+    },
+    "actionGroupShortName": {
+      "type": "string",
+      "defaultValue": "spotifyops"
+    },
+    "notificationEmailAddress": {
+      "type": "string",
+      "metadata": {
+        "description": "Email address that should receive failed pipeline alerts."
+      }
+    },
+    "scheduledQueryRuleName": {
+      "type": "string",
+      "defaultValue": "adf-failed-pipeline-log-alert"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/actionGroups",
+      "apiVersion": "2024-10-01-preview",
+      "name": "[parameters('actionGroupName')]",
+      "location": "global",
+      "properties": {
+        "groupShortName": "[parameters('actionGroupShortName')]",
+        "enabled": true,
+        "emailReceivers": [
+          {
+            "name": "dataops-email",
+            "emailAddress": "[parameters('notificationEmailAddress')]",
+            "useCommonAlertSchema": true
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "name": "[concat(last(split(parameters('dataFactoryResourceId'), '/')), '-diagnostics')]",
+      "scope": "[parameters('dataFactoryResourceId')]",
+      "properties": {
+        "workspaceId": "[parameters('logAnalyticsWorkspaceResourceId')]",
+        "logAnalyticsDestinationType": "Dedicated",
+        "logs": [
+          {
+            "category": "PipelineRuns",
+            "enabled": true
+          },
+          {
+            "category": "ActivityRuns",
+            "enabled": true
+          },
+          {
+            "category": "TriggerRuns",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "AllMetrics",
+            "enabled": true
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2022-06-15",
+      "name": "[parameters('scheduledQueryRuleName')]",
+      "location": "[parameters('location')]",
+      "kind": "LogAlert",
+      "properties": {
+        "displayName": "ADF failed pipeline runs",
+        "description": "Alerts when Azure Data Factory pipeline runs fail.",
+        "enabled": true,
+        "severity": 2,
+        "evaluationFrequency": "PT5M",
+        "windowSize": "PT5M",
+        "scopes": [
+          "[parameters('logAnalyticsWorkspaceResourceId')]"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "ADFPipelineRun | where Status == 'Failed'",
+              "timeAggregation": "Count",
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "actions": {
+          "actionGroups": [
+            "[resourceId('Microsoft.Insights/actionGroups', parameters('actionGroupName'))]"
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/actionGroups', parameters('actionGroupName'))]",
+        "[concat(parameters('dataFactoryResourceId'), '/providers/Microsoft.Insights/diagnosticSettings/', concat(last(split(parameters('dataFactoryResourceId'), '/')), '-diagnostics'))]"
+      ]
+    }
+  ]
+}
