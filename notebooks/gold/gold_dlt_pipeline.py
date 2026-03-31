@@ -1,3 +1,4 @@
+﻿from pyspark import pipelines as dp
 # Databricks notebook source
 # COMMAND ----------
 import os
@@ -122,6 +123,7 @@ def gold_fact_stream():
                 F.col("date_key_hash").alias("date_dim_key"),
             )
     )
+
 
 
 
